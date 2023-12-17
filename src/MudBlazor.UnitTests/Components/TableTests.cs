@@ -8,6 +8,7 @@ using AngleSharp.Dom;
 using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
+using Moq;
 using MudBlazor.Docs.Examples;
 using MudBlazor.UnitTests.TestComponents;
 using NUnit.Framework;
@@ -117,7 +118,79 @@ namespace MudBlazor.UnitTests.Components
         }
 
         /// <summary>
-        /// Check if the loading and no records functionnality is working in grouped table.
+        /// Ensure that when the loading switch is enabled,
+        /// a new row appears in the table header without affecting the table body.
+        /// </summary>
+        [Test]
+        public void LoadingSwitchAddsRowToHeaderWithoutAffectingBody()
+        {
+            // Render the component
+            var comp = Context.RenderComponent<TableLoadingTest>();
+
+            // Initial count of header and body rows
+            var initialHeaderRows = comp.FindAll("thead tr");
+            var initialBodyRows = comp.FindAll("tbody tr");
+
+            // Verify initial state: 1 row in the header and 2 rows in the body
+            initialHeaderRows.Count.Should().Be(1);
+            initialBodyRows.Count.Should().Be(2);
+
+            // Toggle the loading switch to the 'loading' state
+            var loadingSwitch = comp.Find("#switch");
+            loadingSwitch.Change(true);
+
+            // Count rows after toggling the switch
+            var updatedHeaderRows = comp.FindAll("thead tr");
+            var updatedBodyRows = comp.FindAll("tbody tr");
+
+            // Verify updated state:
+            // 2 rows in the header (original + loading row) and 2 rows in the body (unchanged)
+            updatedHeaderRows.Count.Should().Be(2);
+            updatedBodyRows.Count.Should().Be(2);
+        }
+
+        /// <summary>
+        /// Ensure that when the table loader is visible,
+        /// adding new columns dynamically such as multi-selection
+        /// will not affect the number of columns in the row with the loader.
+        /// </summary>
+        [Test]
+        public void DynamicColumnsDoNotAffectLoadingRow()
+        {
+            // Render the component
+            var comp = Context.RenderComponent<TableLoadingTest>();
+
+            // Ensure table initially has 6 columns
+            var headersRow = comp.FindAll("thead tr")[0];
+            headersRow.ChildElementCount.Should().Be(6);
+
+            // Toggle the loading switch to the 'loading' state
+            var loadingSwitch = comp.Find("#switch");
+            loadingSwitch.Change(true);
+
+            // Get the loader row which is second row in the thead
+            var loaderRow = comp.FindAll("thead tr")[1];
+
+            // Verify that loader row has one child which is a loader cell
+            var loaderCell = loaderRow.QuerySelector(".mud-table-loading");
+            loaderCell.IsOnlyChild();
+
+            // Toggle the multi-selection switch to the 'on' state
+            var multiSelectionSwitch = comp.Find("#multi-selection");
+            multiSelectionSwitch.Change(true);
+
+            // Ensure table has 7 columns
+            headersRow = comp.FindAll("thead tr")[0];
+            headersRow.ChildElementCount.Should().Be(7);
+
+            // Verify that loader row still has one child
+            // which is a loader cell
+            loaderCell = loaderRow.QuerySelector(".mud-table-loading");
+            loaderCell.IsOnlyChild();
+        }
+
+        /// <summary>
+        /// Check if the loading and no records functionality is working in grouped table.
         /// </summary>
         [Test]
         public void TableGroupLoadingAndNoRecordsTest()
@@ -234,6 +307,28 @@ namespace MudBlazor.UnitTests.Components
             comp.FindAll("tr").Count.Should().Be(59);
         }
 
+        [Test]
+        public void TableFilterCachingTest()
+        {
+            var comp = Context.RenderComponent<TableFilterTest1>();
+            // print the generated html      
+            var table = comp.FindComponent<MudTable<string>>().Instance;
+            var searchString = comp.Find("#searchString");
+            table.FilteringRunCount.Should().Be(1);
+            // should return 3 items
+            searchString.Change("Ala");
+            table.FilteringRunCount.Should().Be(2);
+            // no matches
+            searchString.Change("ZZZ");
+            table.FilteringRunCount.Should().Be(3);
+            // should return 1 item
+            searchString.Change("Alaska");
+            table.FilteringRunCount.Should().Be(4);
+            // clear search
+            searchString.Change(string.Empty);
+            table.FilteringRunCount.Should().Be(5);
+        }
+
         /// <summary>
         /// simple navigation using the paging buttons
         /// </summary>
@@ -302,6 +397,19 @@ namespace MudBlazor.UnitTests.Components
             //navigate to specified page
             await table.InvokeAsync(() => table.Instance.NavigateTo(pageIndex));
             comp.FindAll("tr.mud-table-row")[0].TextContent.Should().Be(expectedFirstItem);
+        }
+
+        /// <summary>
+        /// page size option initial value test. Initial value should not be 10 since PageSizeOption is set to be new int[]{8, 16, 32}
+        /// </summary>
+        [Test]
+        public async Task TablePageSizeOptions()
+        {
+            var comp = Context.RenderComponent<TablePageSizeOptionsTest>();
+            // print the generated html      
+            // select elements needed for the test
+            var pager = comp.FindComponent<MudSelect<int>>().Instance;
+            pager.Value.Should().Be(8);
         }
 
         /// <summary>
@@ -546,12 +654,12 @@ namespace MudBlazor.UnitTests.Components
             inputs[0].Change(true);
             table.SelectedItems.Count.Should().Be(3);
             comp.Find("p").TextContent.Should().Be("SelectedItems { 0, 1, 2 }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(3);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(3);
             inputs = comp.FindAll("input").ToArray();
             inputs[0].Change(false);
             table.SelectedItems.Count.Should().Be(0);
             comp.Find("p").TextContent.Should().Be("SelectedItems {  }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(0);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(0);
         }
 
         /// <summary>
@@ -579,12 +687,12 @@ namespace MudBlazor.UnitTests.Components
             inputs[0].Change(true);
             table.SelectedItems.Count.Should().Be(3);
             comp.Find("p").TextContent.Should().Be("SelectedItems { 0, 1, 2 }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(3);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(3);
             inputs = comp.FindAll("input").ToArray();
             inputs[0].Change(false);
             table.SelectedItems.Count.Should().Be(0);
             comp.Find("p").TextContent.Should().Be("SelectedItems {  }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(0);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(0);
         }
 
         /// <summary>
@@ -602,15 +710,15 @@ namespace MudBlazor.UnitTests.Components
             var checkboxes = checkboxRendered.Select(x => x.Instance).ToArray();
             table.SelectedItems.Count.Should().Be(1); // selected items should be empty
             comp.Find("p").TextContent.Should().Be("SelectedItems { 1 }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(1);
-            checkboxes[0].Checked.Should().Be(false);
-            checkboxes[1].Checked.Should().Be(true);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(1);
+            checkboxes[0].Value.Should().Be(false);
+            checkboxes[1].Value.Should().Be(true);
             // uncheck it
             checkboxRendered[1].Find("input").Change(false);
             // check result
             table.SelectedItems.Count.Should().Be(0);
             comp.Find("p").TextContent.Should().Be("SelectedItems {  }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(0);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(0);
         }
 
         /// <summary>
@@ -628,13 +736,13 @@ namespace MudBlazor.UnitTests.Components
             var checkboxes = checkboxRendered.Select(x => x.Instance).ToArray();
             table.SelectedItems.Count.Should().Be(3);
             comp.Find("p").TextContent.Should().Be("SelectedItems { 0, 1, 2 }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(3);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(3);
             // uncheck only row 1 => header checkbox should be off then
             checkboxRendered[2].Find("input").Change(false);
-            checkboxes[0].Checked.Should().Be(true); // header checkbox should be on
+            checkboxes[0].Value.Should().Be(true); // header checkbox should be on
             table.SelectedItems.Count.Should().Be(2);
             comp.Find("p").TextContent.Should().Be("SelectedItems { 0, 1 }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(2);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(2);
         }
 
         /// <summary>
@@ -652,15 +760,15 @@ namespace MudBlazor.UnitTests.Components
             var checkboxes = checkboxRendered.Select(x => x.Instance).ToArray();
             table.SelectedItems.Count.Should().Be(4);
             comp.Find("p").TextContent.Should().Be("SelectedItems { 0, 1, 2, 3 }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(2);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(2);
             // uncheck a row then switch to page 2 and both checkboxes on page 2 should be checked
             checkboxRendered[1].Find("input").Change(false);
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(1);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(1);
             // switch page 
             await comp.InvokeAsync(() => table.CurrentPage = 1);
             // now two checkboxes should be checked on page 2
             checkboxes = comp.FindComponents<MudCheckBox<bool>>().Select(x => x.Instance).ToArray();
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(2);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(2);
         }
 
         /// <summary>
@@ -688,12 +796,12 @@ namespace MudBlazor.UnitTests.Components
             inputs[4].Change(true);
             table.SelectedItems.Count.Should().Be(3);
             comp.Find("p").TextContent.Should().Be("SelectedItems { 0, 1, 2 }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(3);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(3);
             inputs = comp.FindAll("input").ToArray();
             inputs[4].Change(false);
             table.SelectedItems.Count.Should().Be(0);
             comp.Find("p").TextContent.Should().Be("SelectedItems {  }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(0);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(0);
         }
 
         /// <summary>
@@ -721,12 +829,12 @@ namespace MudBlazor.UnitTests.Components
             inputs[4].Change(true);
             table.SelectedItems.Count.Should().Be(3);
             comp.Find("p").TextContent.Should().Be("SelectedItems { 0, 1, 2 }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(3);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(3);
             inputs = comp.FindAll("input").ToArray();
             inputs[4].Change(false);
             table.SelectedItems.Count.Should().Be(0);
             comp.Find("p").TextContent.Should().Be("SelectedItems {  }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(0);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(0);
         }
 
         /// <summary>
@@ -756,7 +864,7 @@ namespace MudBlazor.UnitTests.Components
             inputs[0].Change(true);
             table.SelectedItems.Count.Should().Be(1);
             comp.Find("p").TextContent.Should().Be("SelectedItems { 1 }"); // only "1" should be present
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(1);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(1);
             inputs[0].Change(false);
             table.SelectedItems.Count.Should().Be(0);
             comp.Find("p").TextContent.Should().Be("SelectedItems {  }");
@@ -768,11 +876,11 @@ namespace MudBlazor.UnitTests.Components
             inputs[0].Change(true);
             table.SelectedItems.Count.Should().Be(3);
             comp.Find("p").TextContent.Should().Be("SelectedItems { 0, 1, 2 }"); // we reset search, so all three numbers should be searched
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(3);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(3);
             inputs[0].Change(false);
             table.SelectedItems.Count.Should().Be(0);
             comp.Find("p").TextContent.Should().Be("SelectedItems {  }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(0);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(0);
         }
 
         /// <summary>
@@ -791,7 +899,7 @@ namespace MudBlazor.UnitTests.Components
             inputs.Change(true);
             table.SelectedItems.Count.Should().Be(5);
             comp.Find("p").TextContent.Should().Be("SelectedItems { 0, 1, 2, 3, 4 }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(5);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(5);
 
             // click delete button
             var buttons = comp.FindAll("button");
@@ -810,9 +918,9 @@ namespace MudBlazor.UnitTests.Components
             //verify selection
             table.SelectedItems.Count.Should().Be(4);
             comp.Find("p").TextContent.Should().Be("SelectedItems { 0, 1, 3, 4 }");
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(4);
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(4);
 
-            checkboxes[0].Checked.Should().BeTrue(); //manually verify header is checked after deleting item
+            checkboxes[0].Value.Should().BeTrue(); //manually verify header is checked after deleting item
         }
 
         /// <summary>
@@ -1028,6 +1136,16 @@ namespace MudBlazor.UnitTests.Components
         public async Task TableServerSideDataNull()
         {
             var comp = Context.RenderComponent<TableServerSideDataTest6>();
+        }
+
+        /// <summary>
+        /// The table should not render its NoContent fragment prior to loading server data
+        /// </summary>
+        [Test]
+        public async Task TableServerDataLoadingTest()
+        {
+            var comp = Context.RenderComponent<TableServerDataLoadingTest>();
+            comp.Instance.NoRecordsHasRendered.Should().BeFalse();
         }
 
         /// <summary>
@@ -1758,6 +1876,29 @@ namespace MudBlazor.UnitTests.Components
             tr.Length.Should().Be(5); // 1 table header + 4 group headers
         }
 
+        [Test]
+        public void ExpandAndCollapsAllGroupsTest()
+        {
+            var comp = Context.RenderComponent<TableGroupingTest>();
+            var table = comp.Instance.tableInstance;
+            table.GroupBy = new TableGroupDefinition<TableGroupingTest.RacingCar>(rc => rc.Category, null) { GroupName = "Category", IsInitiallyExpanded = false, Expandable = true };
+            comp.Render();
+
+            // Header only since we have IsInitiallyExpanded = false
+            table.Context.GroupRows.Count.Should().Be(4);
+            comp.FindAll("tr").ToArray().Length.Should().Be(5); // 1 table header + 4 group headers
+
+            // Expand all groups
+            table.ExpandAllGroups();
+            comp.Render();
+            comp.FindAll("tr").ToArray().Length.Should().Be(18); // 1 table header + 4 group headers + 9 item rows + 4 group footers
+
+            // Collapse all groups
+            table.CollapseAllGroups();
+            comp.Render();
+            comp.FindAll("tr").ToArray().Length.Should().Be(5); // 1 table header + 4 group headers
+        }
+
         /// <summary>
         /// Tests the correct output when filter does not return any matching elements
         /// </summary>
@@ -1916,7 +2057,7 @@ namespace MudBlazor.UnitTests.Components
             inputs[0].Change(true);
             table.SelectedItems.Count.Should().Be(3);
 
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(3); //there should be 3 items
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(3); //there should be 3 items
             comp.Find("p").TextContent.Should().Be("Elements { A, B, C }");
 
             // Click on the second row
@@ -1929,13 +2070,13 @@ namespace MudBlazor.UnitTests.Components
 
             table.SelectedItems.Count.Should().Be(3);
 
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(3); //there should be 3 items
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(3); //there should be 3 items
             comp.Find("p").TextContent.Should().Be("Elements { A, Change, C }");
 
             // Uncheck and verify that all items are removed
             inputs[0].Change(false);
             table.SelectedItems.Count.Should().Be(0);
-            checkboxes.Sum(x => x.Checked ? 1 : 0).Should().Be(0); //there should be 4 items
+            checkboxes.Sum(x => x.Value ? 1 : 0).Should().Be(0); //there should be 4 items
             comp.Find("p").TextContent.Should().Be("Elements {  }");
         }
 
